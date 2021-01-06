@@ -191,7 +191,7 @@ class NoPTrain():
         # Define Networks
         model = NoPModel(self.no_categories)
         if self.use_cuda:
-            if torch.cuda.device_count()>0:
+ #           if torch.cuda.device_count()>0:
  #               model = nn.DataParallel(model)
             model = model.to(self.device)
 
