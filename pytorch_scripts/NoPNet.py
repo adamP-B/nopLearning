@@ -112,12 +112,13 @@ class NoPModel(nn.Module):
         a0 = self.attention0(x, randLabel)
         pos0 = self.localiser(x, a0)
         subx = self.spatial(data, a0)
-        label = self.classifier(subx)
-        a1 = self.attention1(x, label)
+        labels = self.classifier(subx)
+        targets = torch.argmax(labels, dim=1)
+        a1 = self.attention1(x, labels)
         pos1 = self.localiser(x, a1)
         a2 = self.attention2(x, None)
         pos2 = self.localiser(x, a2)
-        return pos0, pos1, pos2, label
+        return pos0, pos1, pos2, targets
 
         
 

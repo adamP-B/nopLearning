@@ -15,15 +15,15 @@ class NoPLearning:
         description = "Train Naming of Parts Learner"
         parser = argparse.ArgumentParser(prog="noLearning",
                                          description=description)
-        parser.add_argument("-batch_size", metavar="N", type=int,
+        parser.add_argument("-b", "-batch_size", metavar="N", type=int,
                    help="Batch Size", default=16)
-        parser.add_argument("-no_epochs", metavar="N", type=int,
+        parser.add_argument("-e", "-no_epochs", metavar="N", type=int,
                             help="Number of epochs", default=100)
-        parser.add_argument("-no_categories", metavar="N", type=int,
+        parser.add_argument("-c", "-no_categories", metavar="N", type=int,
                             help="Number of categories", default=20)
-        parser.add_argument("-learning_rate", metavar="F", type=float,
+        parser.add_argument("-lr", "-learning_rate", metavar="F", type=float,
                             help="Learning rate", default=0.01)
-        parser.add_argument("-num-workers", metavar="N", type=int,
+        parser.add_argument("-w", "-num-workers", metavar="N", type=int,
                             help="Number of workers processing data",
                             default=4)
         parser.add_argument("-dataset", metavar="SetName", type=str,
