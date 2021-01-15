@@ -5,7 +5,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from sos import Sos
 import collections
-    
+from mydataset import load_data, DataSetType
+import pytest
 
 class Preprocess(nn.Module):
     """Preprocess images using CNN"""
@@ -13,22 +14,88 @@ class Preprocess(nn.Module):
     def __init__(self):
         """Defines parameters for module"""
         super(Preprocess, self).__init__()
-        self.fc1 = nn.Linear(2,2)
+        # CNN0
+        self.conv1 = nn.Conv2d(3,16, kernel_size=5, padding=2)
+        self.conv2 = nn.Conv2d(16,16, kernel_size=3, padding=1)
+        self.conv3 = nn.Conv2d(16,16, kernel_size=3, padding=1)
+        # CNN1
+        self.conv4 = nn.Conv2d(16,16, kernel_size=3, padding=1)
+        self.conv5 = nn.Conv2d(16,16, kernel_size=3, padding=1)
+        self.conv6 = nn.Conv2d(16,16, kernel_size=3, padding=1)
+        self.fc1 = nn.Linear(256, 64)
+        self.fc2 = nn.Linear(64, 32)
 
-    def forward(self, x):
-        """Performs preprocessing to a [B,16,16,16] block"""
-        return torch.ones([x.shape[0], 16, 16, 16])
+    def forward(self, x: "Tensor") -> ("Tensor", "Tensor"):
+        """Performs preprocessing 
+        Input  x = [B, 3, 64, 64]
+        Output x = [B, 16, 16, 16] block
+        Output y = [B, 32]"""
 
-class Localiser(nn.Module):
+        x = F.relu(self.conv1(x))
+        x = F.max_pool2d(F.relu(self.conv2(x)), 2)
+        x = F.max_pool2d(F.relu(self.conv3(x)), 2)
+
+        # Attention block CNN1
+        y = F.max_pool2d(F.relu(self.conv4(x)), 2)
+        y = F.max_pool2d(F.relu(self.conv5(y)), 2)
+        y = F.relu(self.conv6(y))
+        y = y.view(-1, 256)
+        y = F.relu(self.fc1(y))
+        y = self.fc2(y)
+        return x, y
+
+
+class Attention(nn.Module):
+    """Given preproceesed image and label output attention mask"""
+
+    def __init__(self, no_categories):
+        """Holds parameters for module"""
+        super(Attention, self).__init__()
+        if no_categories is not None:           
+            self.fc0 = nn.Linear(no_categories, 32)
+            self.fc1 = nn.Linear(64, 64)
+        else:
+            self.fc01 = nn.Linear(32,64)
+        self.fc2 = nn.Linear(64, 32)
+        self.fc3 = nn.Linear(32, 16)
+
+    def forward(self, x: "Tensor", label: "Tensor") -> "Tensor":
+        """computes an attention mask
+        Input  x = [B,32] # image attention
+        Input  label = [B,no_categories]
+        Output x = [N,16] % channel normalisation"""
+
+        if label is not None:
+            label = F.relu(self.fc0(label))
+            x = torch.cat([label, x], dim=1)
+            x = F.relu(self.fc1(x))
+        else:
+            x = F.relu(self.fc01(x))
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x)
+        return x
+
+
+class LocationModule(nn.Module):
     """Output Position"""
 
     def __init__(self):
         """Defines parameters for module"""
-        super(Localiser, self).__init__()
-        self.fc1 = nn.Linear(32,4)
+        super(LocationModule, self).__init__()
+        self.conv1 = nn.Conv2d(18,16, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(16,16, kernel_size=3, padding=1)
+        self.conv3 = nn.Conv2d(16,16, kernel_size=3, padding=1)
+        self.conv4 = nn.Conv2d(16,16, kernel_size=3, padding=1)
+        self.conv5 = nn.Conv2d(16,16, kernel_size=3, padding=1)
+        self.fc1 = nn.Linear(256, 32)
+        self.fc2 = nn.Linear(32, 4)
+
         
-    def forward(self, x, att):
-        """Outputs position and size [x, y, sx, sy]"""
+    def forward(self, x: "Tensor", att: "Tensor") -> "Tensor":
+        """Locates an object in a image
+        Input   x = [B, 16, 16, 16]
+        Input att = [B, 16]
+        Output  x = [x, y, sx, sy]"""
 
         # multiplicative attention
         x = torch.einsum("bcwh,bc->bcwh", [x,att])
@@ -43,36 +110,45 @@ class Localiser(nn.Module):
         x = torch.cat((x,colCoord,rowCoord), dim=1)
 
         # CNN
+        x = F.relu(self.conv1(x))
+        x = F.relu(F.max_pool2d(self.conv2(x), 2))
+        x = F.relu(self.conv3(x))
+        x = F.max_pool2d(self.conv4(x), 2)
+        x = self.conv5(x)
 
         # MLP
-        x = torch.ones([b,32])
-        x = torch.sigmoid(self.fc1(x))
+        x = x.view(-1, 256)
+        x = F.relu(self.fc1(x))
+        x = self.fc2(x)
+        x = torch.sigmoid(x)
         return x
 
-class Attention(nn.Module):
-    """Given preproceesed image and label output attention mask"""
-
-    def __init__(self, no_categrories):
-        """Holds parameters for module"""
-        super(Attention, self).__init__()
-        self.fc1 = nn.Linear(2,2)
-
-    def forward(self, x, label):
-        """computes an attention mask"""
-        return torch.ones([x.shape[0], 16])
 
 class Classifier(nn.Module):
     """Given sub-image produces label"""
 
-    def __init__(self, no_categories):
-        """Holds parameters for module"""
+    def __init__(self, no_categories, no_in_channels=3):
         super(Classifier, self).__init__()
-        self.no_categories = no_categories
-        self.fc1 = nn.Linear(2,2)
-        
+        self.conv1 = nn.Conv2d(no_in_channels,16, kernel_size=5, padding=2)
+        self.conv2 = nn.Conv2d(16,16, kernel_size=3, padding=1)
+        self.conv3 = nn.Conv2d(16,16, kernel_size=3, padding=1)
+        self.conv4 = nn.Conv2d(16,16, kernel_size=3, padding=1)
+        self.fc1 = nn.Linear(256, 64)
+        self.fc2 = nn.Linear(64, 32)
+        self.fc3 = nn.Linear(32, no_categories)
+
     def forward(self, x):
         """Classifies sub-image x"""
-        return torch.ones([x.shape[0], self.no_categories])
+        x = F.relu(self.conv1(x))
+        x = F.relu(F.max_pool2d(self.conv2(x), 2))
+        x = F.relu(self.conv3(x))
+        x = F.relu(F.max_pool2d(self.conv4(x), 2))
+        x = x.view(-1, 256)
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = F.gumbel_softmax(self.fc3(x), hard=True)
+        return x
+
 
 class NoPModel(nn.Module):
     """Network"""
@@ -81,66 +157,49 @@ class NoPModel(nn.Module):
         """Holds all models"""
         super(NoPModel, self).__init__()
 
+        self.no_categories = no_categories
         self.preprocess = Preprocess()
-        self.localiser = Localiser()
+        self.localiser = LocationModule()
         self.attention0 = Attention(no_categories)
         self.attention1 = Attention(no_categories)
-        self.attention2 = Attention(no_categories)
+        self.attention2 = Attention(None)
         self.classifier = Classifier(no_categories)
 
-    def params(self, type: int):
-        if type == 0:
-            params = list()
-            for module in (self.preprocess, self.localiser, self.attention0, self.classifier):
-                params += list(module.parameters())
-            return params
-        elif type == 1:
-            return self.attention1.parameters()
-        elif type == 2:
-            return self.attention2.parameters()
-        else:
-            raise ValueError("Error: unknown parameters")
+    def parameters(self):
+        params0 = list()
+        for module in (self.preprocess, self.localiser, self.attention0, self.classifier):
+            params0 += list(module.parameters())
+        return params0, self.attention1.parameters(), self.attention2.parameters()
+
             
     def spatial(self, x, position):
         """Given position information return boundbox"""
         return torch.ones([*x.shape[0:2], 16, 16])
 
-    def run(self, data):
+    def forward(self, data):
         """Run an iteration"""
-        randLabel = torch.rand([data.shape[0], 2])
-        x = self.preprocess(data)
-        a0 = self.attention0(x, randLabel)
+        randLabel = torch.rand([data.shape[0], self.no_categories])
+        x, y = self.preprocess(data)
+        a0 = self.attention0(y, randLabel)
         pos0 = self.localiser(x, a0)
         subx = self.spatial(data, a0)
         labels = self.classifier(subx)
         targets = torch.argmax(labels, dim=1)
-        a1 = self.attention1(x, labels)
+        a1 = self.attention1(y, labels)
         pos1 = self.localiser(x, a1)
-        a2 = self.attention2(x, None)
+        a2 = self.attention2(y, None)
         pos2 = self.localiser(x, a2)
         return pos0, pos1, pos2, targets
 
         
-
-class MyDataSet(Dataset):
-    """A data set"""
-
-    def __init__(self, dataset_name: str, training: bool=True):
-        """Get the data"""
-        super().__init__()
-        self.length = 100
-        self.channels = 3
-
-    def __len__(self) -> int:
-        """Return length"""
-        return self.length
-
-    def __getitem__(self, idx):
-        return torch.ones([self.channels, 64, 64])
-
-    def no_channels(self)->int:
-        return self.channels
-
+def kl_loss(pos1, pos2):
+    """KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())"""
+    mu1 = pos1[:,0:2]
+    sigma1 = pos1[:,2:4]
+    mu2 = pos2[:,0:2]
+    sigma2 = pos2[:,2:4]
+    r2 = torch.div(sigma1, sigma2).pow(2)
+    return 0.5 * torch.sum(r2 - 1 - r2.log() + torch.div((mu1-mu2), sigma2).pow(2))
 
 
 class NoPTrain():
@@ -156,27 +215,14 @@ class NoPTrain():
         if self.use_cuda:
             self.batch_size *= torch.cuda.device_count()
 
-    def kl_loss(self, pos1, pos2):
-        """KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())"""
-        mu1 = pos1[:,0:2]
-        sigma1 = pos1[:,2:4]
-        mu2 = pos2[:,0:2]
-        sigma2 = pos2[:,2:4]
-        r2 = torch.div(sigma1, sigma2).pow(2)
-        return -0.5 * torch.sum(r2 - 1 - r2.log() + torch.div((mu1-mu2), sigma2).pow(2))
-
-    def choose_dataset(self, dataset_name: str):
-        """Choose a dataset"""
-        return MyDataSet();
-
 
     def run(self, dataset_name: str, no_epochs: int)->dict:
         """Runs the training algorithm and returns resuls"""
 
         # Dataset
-        training_set = MyDataSet(dataset_name, True)
-        testing_set = MyDataSet(dataset_name, False)
-        self.channels = training_set.no_channels()
+        training_set =load_data(dataset_name, DataSetType.Train)
+        testing_set = load_data(dataset_name, DataSetType.Test)
+        self.channels = training_set[0].shape[1]
 
         trainloader = DataLoader(training_set,
                                  batch_size=self.batch_size,
@@ -192,32 +238,33 @@ class NoPTrain():
         # Define Networks
         model = NoPModel(self.no_categories)
         if self.use_cuda:
- #           if torch.cuda.device_count()>0:
- #               model = nn.DataParallel(model)
+            if torch.cuda.device_count()>0:
+                model = nn.DataParallel(model)
             model = model.to(self.device)
 
         # Define Optimisers
-        optimiser0 = optim.SGD(model.params(0), lr=self.learning_rate, momentum=0.99)
-        optimiser1 = optim.SGD(model.params(1), lr=self.learning_rate, momentum=0.99)
-        optimiser2 = optim.SGD(model.params(2), lr=self.learning_rate, momentum=0.99)
+        params0, params1, params2 = model.parameters();
+        optimiser0 = optim.SGD(params0, lr=self.learning_rate, momentum=0.99)
+        optimiser1 = optim.SGD(params1, lr=self.learning_rate, momentum=0.99)
+        optimiser2 = optim.SGD(params2, lr=self.learning_rate, momentum=0.99)
 
 
         Metrics = collections.namedtuple('Metrics', ['epoch', "kl1", "kl2"])
         results = []
         for epoch in range(no_epochs):
-            for i, data in enumerate(trainloader, 0):
+            for i, data in enumerate(trainloader):
                 optimiser0.zero_grad();
                 optimiser1.zero_grad();
                 optimiser2.zero_grad();
-                pos0, pos1, pos2, _ = model.run(data)
-                loss1 = self.kl_loss(pos0, pos1)
-                #loss1.backward()
+                pos0, pos1, pos2, _ = model(data)
+                loss1 = kl_loss(pos0, pos1)
+                loss1.backward(retain_graph=True)
                 optimiser0.step()
-                loss2 = self.kl_loss(pos0, pos2);
-                #loss2.backward()
+                loss2 = kl_loss(pos0, pos2);
+                loss2.backward(retain_graph=True)
                 optimiser1.step()
                 loss = loss1-loss2
-                #loss.backward()
+                loss.backward()
                 optimiser2.step()
                 
 
@@ -226,10 +273,10 @@ class NoPTrain():
                 loss2 = torch.zeros([1])
                 cnt = 0;
                 with torch.no_grad():
-                    for i, data in enumerate(trainloader, 0):
-                        pos0, pos1, pos2, _ = model.run(data)
-                        loss1 += torch.mean(self.kl_loss(pos0, pos1))
-                        loss2 += torch.mean(self.kl_loss(pos0, pos2))
+                    for i, data in enumerate(trainloader):
+                        pos0, pos1, pos2, _ = model(data)
+                        loss1 += torch.mean(kl_loss(pos0, pos1))
+                        loss2 += torch.mean(kl_loss(pos0, pos2))
                         cnt += 1
                     res = Metrics(epoch+1, loss1.item()/cnt, loss2.item()/cnt)
                     results.append(res._asdict())
@@ -237,3 +284,4 @@ class NoPTrain():
                           (epoch+1, loss1/cnt, loss2/cnt))
             
         return results;
+
