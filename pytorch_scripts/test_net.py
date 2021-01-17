@@ -147,6 +147,18 @@ def test_model_target_out(batch, model):
     x = model(batch)
     assert all([(c<no_categories) & (c>=0) for c in x[3]])
 
+    
+def test_model(batch, model):
+    x = model(batch)
+    x_shapes = [t.shape for t in x[0:3]]
+    ref_shapes = [torch.Size([batch_size,4]) for i in range(3)]
+    assert x_shapes == ref_shapes
+
+def test_model_param(model):
+    for p in model.parameters():
+        print(len(p))
+    assert len(model.parameters()) == 3
+    
 # Test KLdivergence
 
 def test_kl():
@@ -172,6 +184,3 @@ def test_kl1():
     mykl = (r - 1 - math.log(r) + (mu1-mu2)**2/s2**2)/2
     print(kl, mykl)
     assert kl==mykl
-    
-
-

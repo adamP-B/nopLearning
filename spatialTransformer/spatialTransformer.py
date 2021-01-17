@@ -59,11 +59,16 @@ class Net(nn.Module):
     # Spatial transformer network forward function
     def stn(self, x):
         xs = self.localization(x)
+        print("---stn---")
+        print(xs.shape)
         xs = xs.view(-1, 10 * 3 * 3)
+        print(xs.shape)
         theta = self.fc_loc(xs)
+        print(theta.shape)
         theta = theta.view(-1, 2, 3)
+        print(theta.shape)
 
-        grid = F.affine_grid(theta, x.size())
+        grid = F.affine_grid(theta, x.size(), align_corners=False)
         x = F.grid_sample(x, grid)
 
         return x
@@ -91,7 +96,8 @@ def train(epoch):
     model.train()
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
-
+        if batch_idx==0:
+            print(data.shape)
         optimizer.zero_grad()
         output = model(data)
         loss = F.nll_loss(output, target)
@@ -162,9 +168,12 @@ def visualize_stn():
         axarr[1].imshow(out_grid)
         axarr[1].set_title('Transformed Images')
 
-for epoch in range(1, 20 + 1):
-    train(epoch)
-    test()
+train(1)
+        
+if False:
+    for epoch in range(1, 20 + 1):
+        train(epoch)
+        test()
 
 # Visualize the STN transformation on some input batch
 visualize_stn()

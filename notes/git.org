@@ -1,0 +1,24 @@
+#+TITLE: Git Instructions
+
+* Overview
+  [[./git.png]]
+
+* Staging
+  - git add [file]
+  - git add .
+
+* Local Repo (Head)
+  - git commit -m 'message'
+
+lo* Submitting to Github (master)
+  - https://github.com/adamP-B/nopLearning
+    - git push -u main master
+
+* Useful info
+  - git status
+  - git log
+
+* GPU Server
+  - ssh athenadirect
+  - Don’t forget to set the env variable CUDA_VISIBLE_DEVICES=x where
+    x is the gpu id (0..3 or a set 0,1,4) & nvidia-smi 

@@ -1,0 +1,6 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+\PYG{n}{b} \PYG{o}{=} \PYG{l+m+mi}{3}\PYG{p}{;}                 \PYG{c+c1}{\PYGZsh{} batch size}
+\PYG{n}{t} \PYG{o}{=} \PYG{n}{torch}\PYG{o}{.}\PYG{n}{rand}\PYG{p}{([}\PYG{n}{b}\PYG{p}{,}\PYG{l+m+mi}{4}\PYG{p}{])}  \PYG{c+c1}{\PYGZsh{} example output for localiser0}
+\PYG{n}{toAffine} \PYG{o}{=} \PYG{n}{torch}\PYG{o}{.}\PYG{n}{tensor}\PYG{p}{([[[}\PYG{l+m+mf}{0.0}\PYG{p}{,}\PYG{l+m+mi}{0}\PYG{p}{,}\PYG{l+m+mi}{1}\PYG{p}{,}\PYG{l+m+mi}{0}\PYG{p}{],[}\PYG{l+m+mi}{0}\PYG{p}{,}\PYG{l+m+mi}{0}\PYG{p}{,}\PYG{l+m+mi}{0}\PYG{p}{,}\PYG{l+m+mi}{0}\PYG{p}{],[}\PYG{l+m+mi}{1}\PYG{p}{,}\PYG{l+m+mi}{0}\PYG{p}{,}\PYG{l+m+mi}{0}\PYG{p}{,}\PYG{l+m+mi}{0}\PYG{p}{]],[[}\PYG{l+m+mi}{0}\PYG{p}{,}\PYG{l+m+mi}{0}\PYG{p}{,}\PYG{l+m+mi}{0}\PYG{p}{,}\PYG{l+m+mi}{0}\PYG{p}{],[}\PYG{l+m+mi}{0}\PYG{p}{,}\PYG{l+m+mi}{0}\PYG{p}{,}\PYG{l+m+mi}{0}\PYG{p}{,}\PYG{l+m+mi}{1}\PYG{p}{],[}\PYG{l+m+mi}{0}\PYG{p}{,}\PYG{l+m+mi}{1}\PYG{p}{,}\PYG{l+m+mi}{0}\PYG{p}{,}\PYG{l+m+mi}{0}\PYG{p}{]]])}
+\PYG{n}{torch}\PYG{o}{.}\PYG{n}{einsum}\PYG{p}{(}\PYG{l+s+s2}{\PYGZdq{}xyz,bz\PYGZhy{}\PYGZgt{}bxy\PYGZdq{}}\PYG{p}{,} \PYG{p}{[}\PYG{n}{toAffine}\PYG{p}{,}\PYG{n}{t}\PYG{p}{])}
+\end{Verbatim}

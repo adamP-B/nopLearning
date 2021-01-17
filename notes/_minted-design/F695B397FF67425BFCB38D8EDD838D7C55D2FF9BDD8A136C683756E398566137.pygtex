@@ -1,0 +1,15 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+\PYG{k+kn}{import} \PYG{n+nn}{torch}
+\PYG{k+kn}{import} \PYG{n+nn}{torch.nn.functional} \PYG{k+kn}{as} \PYG{n+nn}{F}
+\PYG{n}{b} \PYG{o}{=} \PYG{l+m+mi}{3}\PYG{p}{;}                 \PYG{c+c1}{\PYGZsh{} batch size}
+\PYG{n}{h} \PYG{o}{=} \PYG{n}{w} \PYG{o}{=} \PYG{l+m+mi}{4}\PYG{p}{;}
+\PYG{n}{c} \PYG{o}{=} \PYG{l+m+mi}{3}\PYG{p}{;}
+\PYG{n}{images} \PYG{o}{=} \PYG{n}{torch}\PYG{o}{.}\PYG{n}{rand}\PYG{p}{([}\PYG{n}{b}\PYG{p}{,}\PYG{n}{c}\PYG{p}{,}\PYG{n}{h}\PYG{p}{,}\PYG{n}{w}\PYG{p}{])}
+\PYG{n}{newHeight} \PYG{o}{=} \PYG{n}{newWidth}
+
+\PYG{n}{t} \PYG{o}{=} \PYG{n}{torch}\PYG{o}{.}\PYG{n}{rand}\PYG{p}{([}\PYG{n}{b}\PYG{p}{,}\PYG{l+m+mi}{4}\PYG{p}{])}  \PYG{c+c1}{\PYGZsh{} example output for localiser0}
+\PYG{n}{toAffine} \PYG{o}{=} \PYG{n}{torch}\PYG{o}{.}\PYG{n}{tensor}\PYG{p}{([[[}\PYG{l+m+mf}{0.0}\PYG{p}{,}\PYG{l+m+mi}{0}\PYG{p}{,}\PYG{l+m+mi}{1}\PYG{p}{,}\PYG{l+m+mi}{0}\PYG{p}{],[}\PYG{l+m+mi}{0}\PYG{p}{,}\PYG{l+m+mi}{0}\PYG{p}{,}\PYG{l+m+mi}{0}\PYG{p}{,}\PYG{l+m+mi}{0}\PYG{p}{],[}\PYG{l+m+mi}{1}\PYG{p}{,}\PYG{l+m+mi}{0}\PYG{p}{,}\PYG{l+m+mi}{0}\PYG{p}{,}\PYG{l+m+mi}{0}\PYG{p}{]],[[}\PYG{l+m+mi}{0}\PYG{p}{,}\PYG{l+m+mi}{0}\PYG{p}{,}\PYG{l+m+mi}{0}\PYG{p}{,}\PYG{l+m+mi}{0}\PYG{p}{],[}\PYG{l+m+mi}{0}\PYG{p}{,}\PYG{l+m+mi}{0}\PYG{p}{,}\PYG{l+m+mi}{0}\PYG{p}{,}\PYG{l+m+mi}{1}\PYG{p}{],[}\PYG{l+m+mi}{0}\PYG{p}{,}\PYG{l+m+mi}{1}\PYG{p}{,}\PYG{l+m+mi}{0}\PYG{p}{,}\PYG{l+m+mi}{0}\PYG{p}{]]])}
+\PYG{n}{a}\PYG{o}{=}\PYG{n}{torch}\PYG{o}{.}\PYG{n}{einsum}\PYG{p}{(}\PYG{l+s+s2}{\PYGZdq{}xyz,bz\PYGZhy{}\PYGZgt{}bxy\PYGZdq{}}\PYG{p}{,} \PYG{p}{[}\PYG{n}{toAffine}\PYG{p}{,}\PYG{n}{t}\PYG{p}{])}
+\PYG{n}{grid} \PYG{o}{=} \PYG{n}{F}\PYG{o}{.}\PYG{n}{affine\PYGZus{}grid}\PYG{p}{(}\PYG{n}{a}\PYG{p}{,} \PYG{p}{[}\PYG{n}{b}\PYG{p}{,}\PYG{n}{c}\PYG{p}{,}\PYG{n}{newHeight}\PYG{p}{,}\PYG{n}{newWidth}\PYG{p}{])}
+\PYG{n}{newImages} \PYG{o}{=} \PYG{n}{F}\PYG{o}{.}\PYG{n}{grid\PYGZus{}sample}\PYG{p}{(}\PYG{n}{images}\PYG{p}{,} \PYG{n}{grid}\PYG{p}{)}
+\end{Verbatim}

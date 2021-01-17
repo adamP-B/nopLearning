@@ -1,0 +1,76 @@
+% Created 2021-01-15 Fri 11:15
+% Intended LaTeX compiler: pdflatex
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{grffile}
+\usepackage{longtable}
+\usepackage{wrapfig}
+\usepackage{rotating}
+\usepackage[normalem]{ulem}
+\usepackage{amsmath}
+\usepackage{textcomp}
+\usepackage{amssymb}
+\usepackage{capt-of}
+\usepackage{hyperref}
+\usepackage{minted}
+\author{Adam Prügel-Bennett}
+\date{\today}
+\title{Git Instructions}
+\hypersetup{
+ pdfauthor={Adam Prügel-Bennett},
+ pdftitle={Git Instructions},
+ pdfkeywords={},
+ pdfsubject={},
+ pdfcreator={Emacs 26.3 (Org mode 9.1.9)}, 
+ pdflang={English}}
+\begin{document}
+
+\maketitle
+\tableofcontents
+
+
+\section{Overview}
+\label{sec:org905c468}
+\begin{center}
+\includegraphics[width=.9\linewidth]{./git.png}
+\end{center}
+
+\section{Staging}
+\label{sec:orgd326cac}
+\begin{itemize}
+\item git add [file]
+\item git add .
+\end{itemize}
+
+\section{Local Repo (Head)}
+\label{sec:org92b39c6}
+\begin{itemize}
+\item git commit -m 'message'
+\end{itemize}
+
+\section{Submitting to Github (master)}
+\label{sec:org1e12b69}
+\begin{itemize}
+\item \url{https://github.com/adamP-B/nopLearning}
+\begin{itemize}
+\item git push -u main master
+\end{itemize}
+\end{itemize}
+
+\section{Useful info}
+\label{sec:org03644d8}
+\begin{itemize}
+\item git status
+\item git log
+\end{itemize}
+
+\section{GPU Server}
+\label{sec:org8b34b3d}
+\begin{itemize}
+\item ssh athenadirect
+\item Don’t forget to set the env variable CUDA\(_{\text{VISIBLE}}\)\(_{\text{DEVICES}}\)=x where
+x is the gpu id (0..3 or a set 0,1,4) \& nvidia-smi
+\end{itemize}
+\end{document}

@@ -7,6 +7,8 @@ from tinydb import TinyDB, Query
 from gitversion import rewritable_git_version
 __VERSION__ = rewritable_git_version(__file__)
 import NoPNet
+import warnings
+warnings.filterwarnings("ignore") 
 
 class NoPLearning:
     def __init__(self, sys_argv=None):
@@ -29,24 +31,31 @@ class NoPLearning:
         parser.add_argument("--dataset", metavar="SetName", type=str,
                             help="Name of dataset", default="CLEVR")
         parser.add_argument('--version', action='version', version=__VERSION__)
+        parser.add_argument('--disable-cuda', action='store_true',
+                            help='Disable CUDA')
         self.args = parser.parse_args(sys_argv)
+        self.args.device = None
+        self.args.use_cuda = None
+        if not self.args.disable_cuda and torch.cuda.is_available():
+            self.args.device = torch.device('cuda')
+            self.args.use_cuda = True
+        else:
+            self.args.device = torch.device('cpu')
+            self.args.use_cuda = False
         print(self.args)
         
     def main(self):
+        torch.autograd.set_detect_anomaly(True)
         data = {}
         start_time = time.time();
         timeStr = datetime.now().strftime("%d-%b-%Y (%H:%M:%S)")
         data["start_time"] = timeStr
         data["args"] = vars(self.args)
         data["version"] = type(self).__name__+"."+__VERSION__
-
-        self.use_cuda = torch.cuda.is_available()
-        self.device = torch.device("cuda" if self.use_cuda else "cpu")
         
-        net = NoPNet.NoPTrain(self.args, self.use_cuda, self.device)
+        net = NoPNet.NoPTrain(self.args)
         data["results"] = net.run(self.args.dataset , self.args.no_epochs)
-        data["device"] = str(self.device)
-        if self.use_cuda:
+        if self.args.use_cuda:
             data["no_GPU"] = torch.cuda.device_count()
         else:
             data["no_GPU"] = 0
