@@ -7,11 +7,13 @@ from torch.utils.data import Dataset, DataLoader
 import torch.nn as nn
 
 from mydataset import load_data, DataSetType
-from NoPNet import Preprocess, Attention, LocationModule, Classifier, NoPModel
+from NoPNet import Preprocess, Attention, UnlabelledAttention
+from NoPNet import LocationModule, Classifier, NoPModel
 from NoPNet import kl_loss
 
 batch_size = 10
 no_categories = 22
+device = torch.device('cpu')
 
 # Test dataloader
 
@@ -39,7 +41,7 @@ def test_preprocess_x(batch, preprocessor):
     x, _ = preprocessor(batch)
     assert x.shape == torch.Size([batch_size,16,16,16])
 
-def test_preprocess_6(batch, preprocessor):
+def test_preprocess_label(batch, preprocessor):
     _, y = preprocessor(batch)
     assert y.shape == torch.Size([batch_size,32])
 
@@ -51,7 +53,7 @@ def attention():
 
 @pytest.fixture
 def attentionNone():
-    return Attention(None)
+    return UnlabelledAttention()
 
 @pytest.fixture
 def attention_data():
@@ -70,7 +72,7 @@ def test_attention(attention_data, attention):
     assert x.shape == torch.Size([batch_size,16])
 
 def test_attentionNone(attention_data, attentionNone):
-    x = attentionNone(attention_data[0], None)
+    x = attentionNone(attention_data[0])
     assert x.shape == torch.Size([batch_size,16])
 
 # Test Location Module
@@ -78,7 +80,7 @@ def test_attentionNone(attention_data, attentionNone):
 
 @pytest.fixture
 def location():
-    return LocationModule()
+    return LocationModule(device)
 
 
 @pytest.fixture
@@ -127,7 +129,7 @@ def test_classifier(classifier_data, classifier):
 
 @pytest.fixture
 def model():
-    return NoPModel(no_categories)
+    return NoPModel(no_categories, device)
 
 def test_model_init(model):
     assert issubclass(type(model), nn.Module)
@@ -155,9 +157,9 @@ def test_model(batch, model):
     assert x_shapes == ref_shapes
 
 def test_model_param(model):
-    for p in model.parameters():
-        print(len(p))
-    assert len(model.parameters()) == 3
+#    for p in model.parameters_all():
+#        print(p)
+    assert len(model.parameters_all()) == 3
     
 # Test KLdivergence
 

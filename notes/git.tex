@@ -1,4 +1,4 @@
-% Created 2021-01-15 Fri 11:15
+% Created 2021-01-19 Tue 09:50
 % Intended LaTeX compiler: pdflatex
 \documentclass[11pt]{article}
 \usepackage[utf8]{inputenc}
@@ -32,26 +32,27 @@
 
 
 \section{Overview}
-\label{sec:org905c468}
+\label{sec:orgedaaa25}
+\href{https://git-scm.com/book/en/v2/Getting-Started-About-Version-Control}{Pro Git Web}
 \begin{center}
 \includegraphics[width=.9\linewidth]{./git.png}
 \end{center}
 
 \section{Staging}
-\label{sec:orgd326cac}
+\label{sec:orgf2368b2}
 \begin{itemize}
 \item git add [file]
 \item git add .
 \end{itemize}
 
 \section{Local Repo (Head)}
-\label{sec:org92b39c6}
+\label{sec:orge5d9e42}
 \begin{itemize}
 \item git commit -m 'message'
 \end{itemize}
 
-\section{Submitting to Github (master)}
-\label{sec:org1e12b69}
+\subsection{Submitting to Github (master)}
+\label{sec:orgd92bd12}
 \begin{itemize}
 \item \url{https://github.com/adamP-B/nopLearning}
 \begin{itemize}
@@ -59,15 +60,33 @@
 \end{itemize}
 \end{itemize}
 
+\subsection{Branching}
+\label{sec:orgc7f9a89}
+\begin{itemize}
+\item git branch newBranchName
+\begin{itemize}
+\item create a new branch (doesn't do anything)
+\end{itemize}
+\item git chechout branchName
+\begin{itemize}
+\item switching to new branch (set HEAD to branch)
+\end{itemize}
+\item git merge anotherBranchName
+\item git log --oneline --decorate --graph --all
+\begin{itemize}
+\item look at branches
+\end{itemize}
+\end{itemize}
+
 \section{Useful info}
-\label{sec:org03644d8}
+\label{sec:org5ebf23f}
 \begin{itemize}
 \item git status
 \item git log
 \end{itemize}
 
 \section{GPU Server}
-\label{sec:org8b34b3d}
+\label{sec:org4349bb1}
 \begin{itemize}
 \item ssh athenadirect
 \item Don’t forget to set the env variable CUDA\(_{\text{VISIBLE}}\)\(_{\text{DEVICES}}\)=x where

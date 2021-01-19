@@ -20,7 +20,7 @@ class NoPLearning:
         parser.add_argument("--batch_size", metavar="N", type=int,
                    help="Batch Size", default=16)
         parser.add_argument("-e", "--no_epochs", metavar="N", type=int,
-                            help="Number of epochs", default=100)
+                            help="Number of epochs", default=20)
         parser.add_argument("-c", "--no_categories", metavar="N", type=int,
                             help="Number of categories", default=20)
         parser.add_argument("-lr", "--learning_rate", metavar="F", type=float,
@@ -37,29 +37,38 @@ class NoPLearning:
         self.args.device = None
         self.args.use_cuda = None
         if not self.args.disable_cuda and torch.cuda.is_available():
-            self.args.device = torch.device('cuda')
+            self.args.device = 'cuda'
             self.args.use_cuda = True
         else:
-            self.args.device = torch.device('cpu')
+            self.args.device = 'cpu'
             self.args.use_cuda = False
         print(self.args)
         
     def main(self):
+        # housekeeping
         torch.autograd.set_detect_anomaly(True)
         data = {}
         start_time = time.time();
         timeStr = datetime.now().strftime("%d-%b-%Y (%H:%M:%S)")
         data["start_time"] = timeStr
-        data["args"] = vars(self.args)
         data["version"] = type(self).__name__+"."+__VERSION__
-        
-        net = NoPNet.NoPTrain(self.args)
-        data["results"] = net.run(self.args.dataset , self.args.no_epochs)
         if self.args.use_cuda:
             data["no_GPU"] = torch.cuda.device_count()
         else:
             data["no_GPU"] = 0
-        data["run_time"] = time.time()-start_time
+        # Setup and train network
+        
+        net = NoPNet.NoPNet(self.args)
+        net.dataset(self.args.dataset)
+        data["training_data"] = net.train(self.args.no_epochs)
+        data["training_time"] = time.time()-start_time
+
+        # Run tests
+
+        net.examples()
+
+        # record results
+        data["args"] = vars(self.args)
         db = TinyDB("../data/runs/"+type(self).__name__+"_data.json")
         db.insert(data)
 

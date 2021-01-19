@@ -42,8 +42,8 @@ def load_data(name: str, datasettype: DataSetType):
         [transforms.RandomResizedCrop(64, scale=(0.5, 1.0)),
          transforms.RandomHorizontalFlip(),
          transforms.ToTensor(),
-         transforms.Normalize(mean=[0.485, 0.456, 0.406, 0],
-                              std=[0.229, 0.224, 0.225, 1]),
+#         transforms.Normalize(mean=[0.485, 0.456, 0.406, 0],
+#                              std=[0.229, 0.224, 0.225, 1]),
          ])
 
     if name=="CLEVR":

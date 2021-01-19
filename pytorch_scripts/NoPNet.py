@@ -7,23 +7,57 @@ from sos import Sos
 import collections
 from mydataset import load_data, DataSetType
 import pytest
+import uuid
+
+
+class CNNBlock(nn.Module):
+    """Two CNNs with ReLUs and maxpooling"""
+
+    def __init__(self, in_channels: int, conv_channels: int):
+        super().__init__()
+        self.conv1 = nn.Conv2d(in_channels, conv_channels,
+                               kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(conv_channels, conv_channels,
+                               kernel_size=3, padding=1)
+
+    def forward(self, x: "Tensor")->"Tensor":
+        x = F.relu(self.conv1(x))
+        x = F.max_pool2d(F.relu(self.conv2(x)), 2)
+        return x
+        
+
+class MLP(nn.Module):
+    """Flattens Input and prodces an MLP with linear outpur"""
+    
+    def __init__(self, layerSizes: list):
+        super().__init__()
+        self.layerSizes = layerSizes
+        self.layers = nn.ModuleList()
+        for n1, n2 in zip(layerSizes, layerSizes[1:]):
+            self.layers.append(nn.Linear(n1, n2))
+
+    def forward(self, x: "Tensor")->"Tensor":
+        x = x.view(-1,self.layerSizes[0])
+        for layer in self.layers[:-1]:
+            x = F.relu(layer(x))
+        x = self.layers[-1](x)
+        return x
 
 class Preprocess(nn.Module):
     """Preprocess images using CNN"""
     
     def __init__(self):
         """Defines parameters for module"""
-        super(Preprocess, self).__init__()
+        super().__init__()
+
         # CNN0
-        self.conv1 = nn.Conv2d(3,16, kernel_size=5, padding=2)
-        self.conv2 = nn.Conv2d(16,16, kernel_size=3, padding=1)
-        self.conv3 = nn.Conv2d(16,16, kernel_size=3, padding=1)
+        self.block1 = CNNBlock(3,16)  # Bx3x64x64  -> Bx16x32x32
+        self.block2 = CNNBlock(16,16) # Bx16x32x32 -> Bx16x16x16
+
         # CNN1
-        self.conv4 = nn.Conv2d(16,16, kernel_size=3, padding=1)
-        self.conv5 = nn.Conv2d(16,16, kernel_size=3, padding=1)
-        self.conv6 = nn.Conv2d(16,16, kernel_size=3, padding=1)
-        self.fc1 = nn.Linear(256, 64)
-        self.fc2 = nn.Linear(64, 32)
+        self.block3 = CNNBlock(16, 16)   # Bx16x16x16 -> Bx16x8x8
+        self.block4 = CNNBlock(16, 16)   # Bx16x8x8   -> Bx16x4x4
+        self.mlp = MLP([16*4*4, 64, 32]) # Bx16x4x4   -> Bx32
 
     def forward(self, x: "Tensor") -> ("Tensor", "Tensor"):
         """Performs preprocessing 
@@ -31,18 +65,14 @@ class Preprocess(nn.Module):
         Output x = [B, 16, 16, 16] block
         Output y = [B, 32]"""
 
-       
-        x = F.relu(self.conv1(x))
-        x = F.max_pool2d(F.relu(self.conv2(x)), 2)
-        x = F.max_pool2d(F.relu(self.conv3(x)), 2)
+        x = self.block1(x)
+        x = self.block2(x)
 
         # Attention block CNN1
-        y = F.max_pool2d(F.relu(self.conv4(x)), 2)
-        y = F.max_pool2d(F.relu(self.conv5(y)), 2)
-        y = F.relu(self.conv6(y))
-        y = y.view(-1, 256)
-        y = F.relu(self.fc1(y))
-        y = self.fc2(y)
+        y = self.block3(x)
+        y = self.block4(y)
+        y = self.mlp(y)
+        
         return x, y
 
 
@@ -51,29 +81,41 @@ class Attention(nn.Module):
 
     def __init__(self, no_categories):
         """Holds parameters for module"""
-        super(Attention, self).__init__()
-        if no_categories is not None:           
-            self.fc0 = nn.Linear(no_categories, 32)
-            self.fc1 = nn.Linear(64, 64)
-        else:
-            self.fc01 = nn.Linear(32,64)
-        self.fc2 = nn.Linear(64, 32)
-        self.fc3 = nn.Linear(32, 16)
+        super().__init__()
+        self.mlp0 = MLP([no_categories, 32])
+        self.mlp1 = MLP([64, 32, 16])
 
-    def forward(self, x: "Tensor", label: "Tensor") -> "Tensor":
+
+    def forward(self, x0: "Tensor", label: "Tensor") -> "Tensor":
         """computes an attention mask
         Input  x = [B,32] # image attention
         Input  label = [B,no_categories]
         Output x = [N,16] % channel normalisation"""
 
-        if label is not None:
-            label = F.relu(self.fc0(label))
-            x = torch.cat([label, x], dim=1)
-            x = F.relu(self.fc1(x))
-        else:
-            x = F.relu(self.fc01(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
+        label = self.mlp0(label)
+        x = torch.cat([label, x0], dim=1)
+    
+        x = self.mlp1(x)
+
+        return x
+    
+class UnlabelledAttention(nn.Module):
+    """Given preproceesed image and label output attention mask"""
+
+    def __init__(self):
+        """Holds parameters for module"""
+        super().__init__()
+        self.mlp1 = MLP([32, 32, 16])
+
+
+    def forward(self, x: "Tensor") -> "Tensor":
+        """computes an attention mask
+        Input  x = [B,32] # image attention
+        Input  label = [B,no_categories]
+        Output x = [N,16] % channel normalisation"""
+
+        x = self.mlp1(x)
+
         return x
 
 
@@ -82,14 +124,10 @@ class LocationModule(nn.Module):
 
     def __init__(self, device):
         """Defines parameters for module"""
-        super(LocationModule, self).__init__()
-        self.conv1 = nn.Conv2d(18,16, kernel_size=3, padding=1)
-        self.conv2 = nn.Conv2d(16,16, kernel_size=3, padding=1)
-        self.conv3 = nn.Conv2d(16,16, kernel_size=3, padding=1)
-        self.conv4 = nn.Conv2d(16,16, kernel_size=3, padding=1)
-        self.conv5 = nn.Conv2d(16,16, kernel_size=3, padding=1)
-        self.fc1 = nn.Linear(256, 32)
-        self.fc2 = nn.Linear(32, 4)
+        super().__init__()
+        self.block1 = CNNBlock(18, 16)  # Bx18x16x16 -> Bx16x8x8
+        self.block2 = CNNBlock(16, 16)  # Bx16x8x8   -> Bx16x4x4
+        self.mlp1 = MLP([16*4*4, 32, 4])
         self.device = device
 
         
@@ -110,17 +148,12 @@ class LocationModule(nn.Module):
         rowCoord = torch.einsum("a,b->ab", [seq,ones]).repeat(b,1,1,1)
         x = torch.cat((x,colCoord,rowCoord), dim=1)
 
-        # CNN
-        x = F.relu(self.conv1(x))
-        x = F.relu(F.max_pool2d(self.conv2(x), 2))
-        x = F.relu(self.conv3(x))
-        x = F.max_pool2d(self.conv4(x), 2)
-        x = self.conv5(x)
-
-        # MLP
-        x = x.view(-1, 256)
-        x = F.relu(self.fc1(x))
-        x = torch.sigmoid(self.fc2(x))
+        # CNN + MLP
+        x = self.block1(x)
+        x = self.block2(x)
+        x = self.mlp1(x)
+        
+        x = 0.8*torch.sigmoid(x)+0.1
         return x
 
 
@@ -128,26 +161,19 @@ class Classifier(nn.Module):
     """Given sub-image produces label"""
 
     def __init__(self, no_categories, no_in_channels=3):
-        super(Classifier, self).__init__()
-        self.conv1 = nn.Conv2d(no_in_channels,16, kernel_size=5, padding=2)
-        self.conv2 = nn.Conv2d(16,16, kernel_size=3, padding=1)
-        self.conv3 = nn.Conv2d(16,16, kernel_size=3, padding=1)
-        self.conv4 = nn.Conv2d(16,16, kernel_size=3, padding=1)
-        self.fc1 = nn.Linear(256, 64)
-        self.fc2 = nn.Linear(64, 32)
-        self.fc3 = nn.Linear(32, no_categories)
+        super().__init__()
+
+        self.block1 = CNNBlock(3, 16)  # Bx3x16x16 -> Bx16x8x8
+        self.block2 = CNNBlock(16, 16)  # Bx16x8x8   -> Bx16x4x4
+        self.mlp = MLP([16*4*4, 64, 32, no_categories])
 
     def forward(self, x):
         """Classifies sub-image x"""
 
-        x = F.relu(self.conv1(x))
-        x = F.relu(F.max_pool2d(self.conv2(x), 2))
-        x = F.relu(self.conv3(x))
-        x = F.relu(F.max_pool2d(self.conv4(x), 2))
-        x = x.view(-1, 256)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = F.gumbel_softmax(self.fc3(x), hard=True)
+        x = self.block1(x)
+        x = self.block2(x)
+        x = self.mlp(x)
+        x = F.gumbel_softmax(x, hard=True)
         return x
 
 
@@ -163,7 +189,7 @@ class NoPModel(nn.Module):
         self.localiser = LocationModule(device)
         self.attention0 = Attention(no_categories)
         self.attention1 = Attention(no_categories)
-        self.attention2 = Attention(None)
+        self.attention2 = UnlabelledAttention()
         self.classifier = Classifier(no_categories)
         self.device = device
 
@@ -189,8 +215,8 @@ class NoPModel(nn.Module):
     def spatial(self, x, position):
         """Given position information return boundbox"""
 
-        convert = [[[0.0,0,1,0],[0,0,0,0],[1,0,0,0]],
-                   [[0.0,0,0,0],[0,0,0,1],[0,1,0,0]]]
+        convert = [[[0.0,0,1,0],[0,0,0,0],[1,0,-0.5,0]],
+                   [[0.0,0,0,0],[0,0,0,1],[0,1,0,-0.5]]]
         toAffine = torch.tensor(convert, device=self.device)
         theta=torch.einsum("xyz,bz->bxy", [toAffine,position])
         b, c, _, _ = x.shape
@@ -211,7 +237,7 @@ class NoPModel(nn.Module):
         targets = torch.argmax(labels, dim=1)
         a1 = self.attention1(y, labels)
         pos1 = self.localiser(x, a1)
-        a2 = self.attention2(y, None)
+        a2 = self.attention2(y)
         pos2 = self.localiser(x, a2)
         return pos0, pos1, pos2, targets
 
@@ -225,55 +251,61 @@ def kl_loss(pos1, pos2):
     r2 = torch.div(sigma1, sigma2).pow(2)
     return 0.5 * torch.sum(r2 - 1 - r2.log() + torch.div((mu1-mu2), sigma2).pow(2))
 
+def pos_str(pos):
+    fs = "(x,y) = ({:#.2f},{:#.2f}), (sx,sy) = ({:#.2f},{:#.2f})"
+    return fs.format(*pos)
 
-class NoPTrain():
+class NoPNet():
     def __init__(self, args):
         """Trains the Naming of Parts network"""
+
+        # define args
         self.args = args
-        self.channels = 3
+        self.device = torch.device(self.args.device)
         if args.use_cuda:
             args.batch_size *= torch.cuda.device_count()
 
+        # Define Networks
+        self.model = NoPModel(self.args.no_categories, self.device)
+        if self.args.use_cuda:
+            self.model = model.to(self.device)
+            #           if torch.cuda.device_count()>0:
+            #               model = nn.DataParallel(model)
 
-    def run(self, dataset_name: str, no_epochs: int)->dict:
+    def dataset(self, dataset_name):
+        """Initialise Dataloaders"""
+        # Dataset
+        self.training_set =load_data(dataset_name, DataSetType.Train)
+        self.testing_set = load_data(dataset_name, DataSetType.Test)
+
+        self.trainloader = DataLoader(self.training_set,
+                                      batch_size=self.args.batch_size,
+                                      shuffle=True,
+                                      num_workers=self.args.num_workers,
+                                      pin_memory=self.args.use_cuda)
+        
+        self.testloader = DataLoader(self.testing_set,
+                                     batch_size=self.args.batch_size, shuffle=False,
+                                     num_workers=self.args.num_workers,
+                                     pin_memory=self.args.use_cuda)
+        
+
+
+
+    def train(self, no_epochs: int)->dict:
         """Runs the training algorithm and returns resuls"""
 
-        # Dataset
-        training_set =load_data(dataset_name, DataSetType.Train)
-        testing_set = load_data(dataset_name, DataSetType.Test)
-        self.channels = training_set[0].shape[1]
-
-        trainloader = DataLoader(training_set,
-                                 batch_size=self.args.batch_size,
-                                 shuffle=True,
-                                 num_workers=self.args.num_workers,
-                                 pin_memory=self.args.use_cuda)
-        
-        testloader = DataLoader(training_set,
-                                batch_size=self.args.batch_size, shuffle=False,
-                                num_workers=self.args.num_workers,
-                                pin_memory=self.args.use_cuda)
-        
-        # Define Networks
-        model = NoPModel(self.args.no_categories, self.args.device)
-        if self.args.use_cuda:
- #           if torch.cuda.device_count()>0:
- #               model = nn.DataParallel(model)
-            model = model.to(self.args.device)
-
-        # Define Optimisers
-#        params0, params1, params2 = model.parameters()
-        optimiser0 = optim.SGD(model.param0(), lr=self.args.learning_rate, momentum=0.99)
-        optimiser1 = optim.SGD(model.param1(), lr=self.args.learning_rate, momentum=0.99)
-        optimiser2 = optim.SGD(model.param2(), lr=self.args.learning_rate, momentum=0.99)
+        optimiser0 = optim.SGD(self.model.param0(), lr=self.args.learning_rate, momentum=0.99)
+        optimiser1 = optim.SGD(self.model.param1(), lr=self.args.learning_rate, momentum=0.99)
+        optimiser2 = optim.SGD(self.model.param2(), lr=self.args.learning_rate, momentum=0.99)
 
 
         Metrics = collections.namedtuple('Metrics', ['epoch', "kl1", "kl2"])
         results = []
         for epoch in range(no_epochs):
-            for i, data in enumerate(trainloader):
-                data = data.to(self.args.device)
-                pos0, pos1, pos2, _ = model(data)
+            for i, data in enumerate(self.trainloader):
+                data = data.to(self.device)
+                pos0, pos1, pos2, _ = self.model(data)
                 loss1 = kl_loss(pos0, pos1)
                 if i%3==0:
                     optimiser0.zero_grad();
@@ -293,20 +325,36 @@ class NoPTrain():
                 
 
             if epoch % 5 == 4:
-                loss1 = torch.zeros([1], device=self.args.device)
-                loss2 = torch.zeros([1], device=self.args.device)
-                cnt = 0;
+                kl1 = Sos()
+                kl2 = Sos()
                 with torch.no_grad():
-                    for i, data in enumerate(trainloader):
-                        data = data.to(self.args.device)
-                        pos0, pos1, pos2, _ = model(data)
-                        loss1 += torch.mean(kl_loss(pos0, pos1))
-                        loss2 += torch.mean(kl_loss(pos0, pos2))
-                        cnt += 1
-                    res = Metrics(epoch+1, loss1.item()/cnt, loss2.item()/cnt)
+                    for i, data in enumerate(self.testloader):
+                        data = data.to(self.device)
+                        pos0, pos1, pos2, _ = self.model(data)
+                        kl1 += kl_loss(pos0, pos1)
+                        kl2 += kl_loss(pos0, pos2)
+                    res = Metrics(epoch+1, str(kl1), str(kl2))
                     results.append(res._asdict())
-                    print("%d KL1 = %.3f KL2 = %.3f" %
-                          (epoch+1, loss1/cnt, loss2/cnt))
-            
-        return results;
+                    print("{}, kl1 = {}, kl2 = {}".format(epoch+1, kl1, kl2))
 
+
+
+        weight_filename = str(uuid.uuid4())
+        self.args.weightFile = weight_filename
+        torch.save(self.model, "../data/runs/weights/" + weight_filename)
+        return results
+
+
+    def examples(self, no_examples: int = 2):
+        torch.no_grad()
+        i = 0
+        print("\n** Examples **")
+        for data in (self.testing_set[i] for i in range(no_examples)):
+            data = data.unsqueeze(0).to(self.device)
+            output = self.model.forward(data)
+            pos0, pos1, pos2, categ = (torch.flatten(x).tolist() for x in output)
+            print("* Output for image ", i) 
+            print("pos0 = " + pos_str(pos0))
+            print("pos1 = " + pos_str(pos1))
+            print("pos2 = " + pos_str(pos2))
+            print("Category = {:d}".format(categ[0]))

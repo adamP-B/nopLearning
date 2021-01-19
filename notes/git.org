@@ -1,6 +1,7 @@
 #+TITLE: Git Instructions
 
 * Overview
+  [[https://git-scm.com/book/en/v2/Getting-Started-About-Version-Control][Pro Git Web]]
   [[./git.png]]
 
 * Staging
@@ -10,9 +11,18 @@
 * Local Repo (Head)
   - git commit -m 'message'
 
-lo* Submitting to Github (master)
+** Submitting to Github (master)
   - https://github.com/adamP-B/nopLearning
     - git push -u main master
+ 
+** Branching
+   - git branch newBranchName
+     - create a new branch (doesn't do anything)
+   - git chechout branchName
+     - switching to new branch (set HEAD to branch)
+   - git merge anotherBranchName
+   - git log --oneline --decorate --graph --all
+     - look at branches
 
 * Useful info
   - git status
