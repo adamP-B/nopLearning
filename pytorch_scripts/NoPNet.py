@@ -64,7 +64,7 @@ class Preprocess(nn.Module):
 
         # CNN0
         self.block1 = CNNBlock(3,16)  # Bx3x64x64  -> Bx16x32x32
-        self.block2 = CNNBlock(16,14) # Bx16x32x32 -> Bx16x16x16
+        self.block2 = CNNBlock(16,16) # Bx16x32x32 -> Bx16x16x16
 
         # CNN1
         self.block3 = CNNBlock(16, 16)   # Bx16x16x16 -> Bx16x8x8
@@ -79,14 +79,6 @@ class Preprocess(nn.Module):
 
         x = self.block1(input) # don't destroy input
         x = self.block2(x)
-
-        # Add gradient vectors
-        b, _, _, width = x.shape
-        ones = torch.ones(width, device=self.device)
-        seq = torch.linspace(0,1,width, device=self.device) 
-        colCoord = torch.einsum("a,b->ab", [ones,seq]).repeat(b,1,1,1)
-        rowCoord = torch.einsum("a,b->ab", [seq,ones]).repeat(b,1,1,1)
-        x = torch.cat((x,colCoord,rowCoord), dim=1)
 
         # Attention block CNN1
         y = self.block3(x)
@@ -108,20 +100,32 @@ class Attention(nn.Module):
         super().__init__()
         self.mlp0 = MLP([no_categories, 32])
         self.mlp1 = MLP([64, 32, 16])
+        self.conv0 = nn.Conv2d(16, 8, kernel_size=3, padding=1)
+        self.conv1 = nn.Conv2d(8, 4, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(4, 1, kernel_size=3, padding=1)
 
 
-    def forward(self, x0: "Tensor", label: "Tensor") -> "Tensor":
+    def forward(self, t, x0: "Tensor", label: "Tensor") -> "Tensor":
         """computes an attention mask
         Input    x0 = [B,32] # image attention gets re-used so don't destroy
         Input label = [B,no_categories]
         Output    x = [N,16] % channel normalisation"""
 
         label = self.mlp0(label)
+
+        # channel weights
         x = torch.cat([label, x0], dim=1)  # don't destroy x0
-    
         x = self.mlp1(x)
 
-        return x
+        # heatmap
+        B, C, W, H = t.shape
+        y = x.unsqueeze(2).unsqueeze(3).expand(B, C, W, H) + t
+        y = F.relu(self.conv0(y))
+        y = F.relu(self.conv1(y))
+        y = self.conv2(y)
+        y = F.softmax(y.view(B,1,W*H),dim=2)
+        
+        return x, y.view(B,1,W,H)
     
 class UnlabelledAttention(nn.Module):
     """Given preproceesed image and label output attention mask"""
@@ -153,20 +157,30 @@ class LocationModule(nn.Module):
     def __init__(self, device):
         """Defines parameters for module"""
         super().__init__()
-        self.block1 = CNNBlock(16, 16)  # Bx18x16x16 -> Bx16x8x8
+        self.block1 = CNNBlock(19, 16)  # Bx18x16x16 -> Bx16x8x8
         self.block2 = CNNBlock(16, 16)  # Bx16x8x8   -> Bx16x4x4
         self.mlp1 = MLP([16*4*4, 32, 4])
         self.device = device
 
         
-    def forward(self, x0: "Tensor", att: "Tensor") -> "Tensor":
+    def forward(self, x0, att, heatmap):
         """Locates an object in a image
         Input  x0 = [B, 16, 16, 16] gets re-used so don't destroy
         Input att = [B, 16]
+        Input heatmap = [B,1,16+16]
         Output  x = [x, y, sx, sy]"""
 
         # multiplicative attention
         x = torch.einsum("bcwh,bc->bcwh", [x0,att]) # don't destroy x0
+
+        # Add gradient vectors
+        b, _, _, width = x.shape
+        ones = torch.ones(width, device=self.device)
+        seq = torch.linspace(0,1,width, device=self.device) 
+        colCoord = torch.einsum("a,b->ab", [ones,seq]).repeat(b,1,1,1)
+        rowCoord = torch.einsum("a,b->ab", [seq,ones]).repeat(b,1,1,1)
+        x = torch.cat((x, colCoord, rowCoord, heatmap), dim=1)
+
 
         # CNN + MLP
         x = self.block1(x)
@@ -254,8 +268,8 @@ class NoPModel(nn.Module):
         # Use attention with random labels
         randLabel = torch.rand([B*self.replicas,
                                 self.no_categories], device=self.device)
-        a0 = self.attention0(y, randLabel)
-        pos0 = self.localiser(x, a0)
+        a0, heatmap = self.attention0(x, y, randLabel)
+        pos0 = self.localiser(x, a0, heatmap)
         del a0
 
         # Use spatial transofrm to cut out subimage and classify
@@ -265,9 +279,9 @@ class NoPModel(nn.Module):
 
         # Attention based on hard lables
         hardLabels = F.gumbel_softmax(labels0, hard=True)
-        a1 = self.attention1(y, hardLabels)
+        a1, heatmap = self.attention1(x, y, hardLabels)
         del hardLabels
-        pos1 = self.localiser(x, a1)
+        pos1 = self.localiser(x, a1, heatmap)
         del a1
 
         # Classify cut out image
